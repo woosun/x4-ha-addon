@@ -20,7 +20,7 @@ _time.tzset()
 from PIL import Image, ImageDraw, ImageFont
 
 
-APP_VERSION = "v5.6"
+APP_VERSION = "v5.7"
 
 
 def log(msg):
@@ -347,9 +347,66 @@ def push(frame):
         return False
 
 
+# ── Windowed (partial) refresh ──────────────────────────────────
+# Find the byte-aligned bounding box of pixels that changed between the
+# previous and current frames. Returns (x, y, w, h) in pixels or None.
+WB = W // 8  # bytes per row
+
+
+def bbox_changed(prev, cur):
+    if prev is None:
+        return None
+    min_bx = max_bx = min_y = max_y = None
+    for y in range(H):
+        off = y * WB
+        if cur[off:off + WB] == prev[off:off + WB]:
+            continue
+        for bx in range(WB):
+            if cur[off + bx] != prev[off + bx]:
+                if min_bx is None or bx < min_bx:
+                    min_bx = bx
+                if max_bx is None or bx > max_bx:
+                    max_bx = bx
+        if min_y is None or y < min_y:
+            min_y = y
+        if max_y is None or y > max_y:
+            max_y = y
+    if min_bx is None:
+        return None  # no change
+    return min_bx, max_bx, min_y, max_y
+
+
+def push_window(frame, min_bx, max_bx, min_y, max_y):
+    x = min_bx * 8
+    w = (max_bx - min_bx + 1) * 8
+    y = min_y
+    h = max_y - min_y + 1
+    # Build the region bytes row by row.
+    region = bytearray()
+    for r in range(y, y + h):
+        off = r * WB + min_bx
+        region += frame[off:off + (w // 8)]
+    url = (f"http://{X4_IP}/window?x={x}&y={y}&w={w}&h={h}")
+    headers = {"Content-Type": "application/octet-stream"}
+    if X4_TOKEN:
+        headers["X-X4-Token"] = X4_TOKEN
+    req = urllib.request.Request(url, data=bytes(region), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return 200 <= r.status < 300
+    except Exception as e:
+        log(f"[push_window] {e}")
+        return False
+
+
+FULL_AREA = W * H
+WINDOW_THRESHOLD = 0.6  # if changed bbox exceeds 60% of screen, send full frame instead
+
+
 def main():
     log(f"{APP_VERSION} starting — X4={X4_IP} interval={POLL_INTERVAL}s")
-    last = None
+    prev_frame = None
+    last_x4_count = -1
     while True:
         try:
             states = ha_get_all()
@@ -358,15 +415,35 @@ def main():
                 time.sleep(10)
                 continue
             frame = render(states)
-            h = hashlib.sha256(frame).hexdigest()
-            if h != last:
-                if push(frame):
-                    last = h
-                    log("pushed")
-                else:
-                    log("push failed")
-            else:
+            same = (prev_frame == frame)
+            if same:
                 log("unchanged")
+                time.sleep(POLL_INTERVAL)
+                continue
+            # Detect device reboot: if refresh_count dropped, its framebuffer was
+            # reset, so a full push is required to re-establish the whole screen.
+            x4st = get_x4_status()
+            x4_count = x4st.get("refresh_count", -1)
+            rebooted = isinstance(x4_count, int) and x4_count < last_x4_count
+            last_x4_count = x4_count if isinstance(x4_count, int) else last_x4_count
+
+            bb = bbox_changed(prev_frame, frame)
+            use_window = False
+            if prev_frame is not None and not rebooted and bb is not None:
+                _, max_bx, _, max_y = bb
+                min_bx, _, min_y, _ = bb
+                w = (max_bx - min_bx + 1) * 8
+                h = max_y - min_y + 1
+                use_window = (w * h) < (FULL_AREA * WINDOW_THRESHOLD)
+
+            if use_window:
+                ok = push_window(frame, min_bx, max_bx, min_y, max_y)
+                log("pushed (window)" if ok else "push failed (window)")
+            else:
+                ok = push(frame)
+                log("pushed (full)" if ok else "push failed")
+            if ok:
+                prev_frame = frame
         except Exception as e:
             log(f"error: {e}")
         time.sleep(POLL_INTERVAL)
