@@ -335,7 +335,7 @@ def push(frame):
 
 
 def main():
-    log(f"v5.3 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
+    log(f"v5.4 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
     last = None
     while True:
         try:

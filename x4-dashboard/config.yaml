@@ -1,6 +1,6 @@
 name: X4 E-Paper Dashboard
-version: "5.3.0"
-changelog: "v5.3: 헤더 한 줄로 복원, 중앙 날짜 표기, 주간전력 짤림 해결"
+version: "5.4.0"
+changelog: "v5.4: 알파인에 tzdata 추가로 시간대(KST) 실제 적용"
 slug: x4_paper
 description: Xteink X4 전자종이 홈모니터 대시보드
 arch:
