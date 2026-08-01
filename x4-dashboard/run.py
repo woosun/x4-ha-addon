@@ -20,7 +20,7 @@ _time.tzset()
 from PIL import Image, ImageDraw, ImageFont
 
 
-APP_VERSION = "v5.8"
+APP_VERSION = "v6.0"
 
 
 def log(msg):
@@ -37,7 +37,7 @@ X4_IP = cfg.get("x4_ip", "")
 X4_TOKEN = cfg.get("x4_token", "")
 HA_URL = cfg.get("ha_url", "http://homeassistant:8123").rstrip("/")
 HA_TOKEN = cfg.get("ha_token", "")
-POLL_INTERVAL = int(cfg.get("poll_interval", 60))
+POLL_INTERVAL = int(cfg.get("poll_interval", 600))
 
 W, H = 800, 480
 FS = W * H // 8
@@ -131,16 +131,68 @@ def get_power_history(now):
     return daily_usage
 
 
+import math
+
+
+def _icon_sun(d, cx, cy, sz):
+    d.ellipse([cx - sz // 2, cy - sz // 2, cx + sz // 2, cy + sz // 2], outline=0, width=2)
+    for a in range(0, 360, 45):
+        r = math.radians(a); r2 = sz // 2 + 2; r3 = sz // 2 + sz // 4
+        d.line([cx + int(r2 * math.cos(r)), cy + int(r2 * math.sin(r)),
+                cx + int(r3 * math.cos(r)), cy + int(r3 * math.sin(r))], fill=0, width=2)
+
+
+def _icon_cloud(d, cx, cy, sz):
+    d.ellipse([cx - sz // 2, cy - sz // 3, cx - sz // 6 + sz // 3, cy + sz // 4], outline=0, width=2)
+    d.ellipse([cx - sz // 6, cy - sz // 2, cx + sz // 3, cy + sz // 6], outline=0, width=2)
+    d.ellipse([cx - sz // 3, cy - sz // 6, cx + sz // 2, cy + sz // 3], outline=0, width=2)
+    d.line([cx - sz // 2, cy + sz // 4, cx + sz // 2, cy + sz // 4], fill=0, width=2)
+
+
+def _icon_pcloud(d, cx, cy, sz):
+    _icon_sun(d, cx - sz // 4, cy - sz // 4, sz // 2)
+    _icon_cloud(d, cx + sz // 5, cy + sz // 6, sz)
+
+
+def _icon_rain(d, cx, cy, sz):
+    _icon_cloud(d, cx, cy - sz // 6, sz)
+    for ox in [-sz // 3, 0, sz // 3]:
+        d.line([cx + ox, cy + sz // 4, cx + ox - 2, cy + sz // 2], fill=0, width=2)
+
+
+def _wicon(d, cond, cx, cy, sz):
+    {"sunny": _icon_sun, "partlycloudy": _icon_pcloud, "cloudy": _icon_cloud,
+     "rainy": _icon_rain, "pouring": _icon_rain, "snowy": _icon_rain,
+     "fog": _icon_cloud, "lightning": _icon_rain, "clear-night": _icon_cloud
+     }.get(cond, _icon_sun)(d, cx, cy, sz)
+
+
+def _hm(iso):
+    try:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        d = _dt.fromisoformat(iso.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_tz.utc)
+        return d.astimezone(_tz(_td(hours=9))).strftime("%H:%M")
+    except Exception:
+        return iso[11:16] if len(iso) > 10 else "--:--"
+
+
+def _short_loc(raw):
+    if raw in ("--", "외출", ""):
+        return "외출"
+    parts = raw.replace("대한민국", "").replace("서울특별시", "").strip()
+    return " ".join(parts.split())[:14] or "외출"
+
+
 def render(states):
     img = Image.new("1", (W, H), 255)
     d = ImageDraw.Draw(img)
-
-    # EXTRA LARGE FONTS
-    f_temp = ImageFont.truetype(FP, 64)    # main weather temp
-    f_big = ImageFont.truetype(FP, 36)     # time, headers
-    f_data = ImageFont.truetype(FP, 30)    # room temps, values
-    f_info = ImageFont.truetype(FP, 22)    # labels, sub-info
-    f_xs = ImageFont.truetype(FP, 16)      # footer only
+    f_huge = ImageFont.truetype(FP, 60)
+    f_big = ImageFont.truetype(FP, 36)
+    f_data = ImageFont.truetype(FP, 30)
+    f_info = ImageFont.truetype(FP, 24)
+    f_xs = ImageFont.truetype(FP, 18)
 
     now = datetime.now()
     mx = 10
@@ -151,180 +203,157 @@ def render(states):
 
     def val(eid, dflt="--"):
         v = st.get(eid, {}).get("state", "")
-        return v if v not in ("unavailable", "unknown", "") else dflt
+        return v if v not in ("unavailable", "unknown", "None", "none", "") else dflt
 
     def tw(s, font): return d.textlength(s, font=font)
     def tx(x, y, s, font, fill=0): d.text((x, y), s, font=font, fill=fill)
+    def txc(cx, y, s, font, fill=0): d.text((cx - tw(s, font) // 2, y), s, font=font, fill=fill)
     def txr(rx, y, s, font, fill=0): d.text((rx - tw(s, font), y), s, font=font, fill=fill)
 
     x4st = get_x4_status()
     x4_bat = x4st.get("battery", "--")
 
-    total_w = 0
-    for pid in ["sensor.geosileeokeon_power", "sensor.baegeob_power", "sensor.anmagi_power"]:
-        try: total_w += float(val(pid, "0"))
-        except ValueError: pass
+    today_kwh = 0.0
+    for eid in ["sensor.geosileeokeon_energy", "sensor.baegeob_total_energy", "sensor.anmagi_energy"]:
+        try:
+            today_kwh += float(val(eid, "0"))
+        except ValueError:
+            pass
 
-    wcond = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaenalssi")
+    wcond = val("weather.naver_weather_banghag1dong_nalssi_banghag1dong", "sunny")
+    ext = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaeondo")
+    feels = val("sensor.naver_weather_banghag1dong_nalssi_cegamondo")
+    humid = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaeseubdo")
+    wdir = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaepunghyang")
+    wspeed = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaepungsog")
+    hi = val("sensor.naver_weather_banghag1dong_nalssi_coegoondo")
+    lo = val("sensor.naver_weather_banghag1dong_nalssi_coejeoondo")
+    rain = val("sensor.naver_weather_banghag1dong_nalssi_gangsuhwagryul")
+    pm10 = val("sensor.naver_weather_banghag1dong_nalssi_misemeonji")
+    pm10g = val("sensor.naver_weather_banghag1dong_nalssi_misemeonjideunggeub")
+    pm25 = val("sensor.naver_weather_banghag1dong_nalssi_comisemeonji")
+    pm25g = val("sensor.naver_weather_banghag1dong_nalssi_comisemeonjideunggeub")
+    sunrise = _hm(val("sensor.sun_next_rising", ""))
+    sunset = _hm(val("sensor.sun_next_setting", ""))
+    ac_power = val("sensor.geosileeokeon_power", "0")
 
     period = "오전" if now.hour < 12 else "오후"
     h12 = now.strftime("%I:%M").lstrip("0")
-    tx(mx, 0, f"{period} {h12}", f_big, 0)
-    tx(mx + tw(f"{period} {h12}", f_big) + 8, 10, APP_VERSION, f_info, 0)
-    _ds = date_ko(now)
-    tx((W - tw(_ds, f_info)) // 2, 6, _ds, f_info, 0)
-    x4b = "--" if x4_bat == "--" else f"{x4_bat}%"
-    txr(W - mx, 7, f"{X4_IP} · 배터리 {x4b} · {total_w:.0f}W", f_info, 0)
 
-    # ── LAYOUT ──────────────────────────────────────────────
-    left_w = 460
-    col_r = left_w + 6
-    HEADER_H = 48
-    top = HEADER_H + 4
-    d.line((left_w, top, left_w, H - 14), fill=0, width=1)
+    HEADER_H = 52
+    tx(mx, 0, f"업데이트 {h12}", f_big, 0)
+    tx(mx + tw(f"업데이트 {h12}", f_big) + 8, 10, APP_VERSION, f_info, 0)
+    txr(W - mx, 0, f"{X4_IP}", f_info, 0)
+    txr(W - mx, 24, f"배터리 {x4_bat}% · 오늘 {today_kwh:.1f}kWh", f_info, 0)
+    txc(W // 2, 14, date_ko(now), f_info, 0)
+    d.line((mx, HEADER_H, W - mx, HEADER_H), fill=0, width=2)
 
-    # ═══ LEFT: WEATHER + FORECAST + POWER ═══
-    lx = mx
-    y = top
+    left_w = 500; col_r = 510; top = HEADER_H + 6
+    d.line((left_w, top, left_w, H - 8), fill=0, width=1)
 
-    # Weather — giant temp
-    ext = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaeondo")
-    tx(lx, y, f"{ext}'", f_temp, 0)
-    txr(left_w - 4, y + 8, wcond, f_big, 0)
-    y += 72
+    lx = mx; y = top
+    tx(lx, y, f"{ext}'", f_huge, 0)
+    _wx = lx + int(tw(f"{ext}'", f_huge)) + 26
+    _wicon(d, wcond, _wx, y + 28, 38)
+    tx(_wx + 50, y + 4, "방학1동", f_info, 0)
+    y += 60
 
-    feels = val("sensor.naver_weather_banghag1dong_nalssi_cegamondo")
-    humid = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaeseubdo")
-    tx(lx, y, f"체감 {feels}' 습도 {humid}%", f_info, 0)
-    y += 26
+    tx(lx, y, f"체감 {feels}' 습도 {humid}%  {wdir} {wspeed}m/s", f_info, 0); y += 26
+    tx(lx, y, f"최고 {hi}' 최저 {lo}'  비안옴 {rain}%", f_info, 0); y += 26
+    tx(lx, y, f"일출 {sunrise} 일몰 {sunset}  미세 {pm10}({pm10g}) 초미세 {pm25}({pm25g})", f_xs, 0); y += 22
 
-    hi = val("sensor.naver_weather_banghag1dong_nalssi_coegoondo")
-    lo = val("sensor.naver_weather_banghag1dong_nalssi_coejeoondo")
-    tx(lx, y, f"최고 {hi}' 최저 {lo}'", f_info, 0)
-    y += 28
-
-    # Forecast — bigger
-    d.line((lx, y, left_w - 4, y), fill=0, width=1)
-    y += 4
+    d.line((lx, y, left_w - 6, y), fill=0, width=1); y += 6
+    fcw = left_w - lx - 10; cw = fcw // 5
     forecast = get_weekly_forecast()
-    fcw = left_w - lx - 8
-    col_w = fcw // 5
     for i, (weekday, cond, dlo, dhi, drain) in enumerate(forecast[:5]):
-        cx = lx + i * col_w
-        tx(cx + 2, y, weekday, f_info, 0)
-        tx(cx + 2, y + 24, cond, f_xs, 0)
-        tx(cx + 2, y + 44, f"{dhi}'", f_data, 0)
-        tx(cx + 2, y + 78, f"{dlo}'", f_info, 0)
-    y += 110 if forecast else 0
+        cx = lx + i * cw; ccx = cx + cw // 2
+        tx(ccx, y, weekday, f_info, 0)
+        _wicon(d, cond, ccx, y + 46, 26)
+        txc(cx + cw // 2, y + 74, f"{dhi}'", f_data, 0)
+        txc(cx + cw // 2, y + 110, f"{dlo}'", f_info, 0)
+    y += 138
 
-    # Power chart
-    d.line((lx, y, left_w - 4, y), fill=0, width=1)
-    y += 4
-    tx(lx, y, "주간 전력", f_info, 0)
-    y += 4
-
-    daily_usage = get_power_history(now)
-    # Leave room inside the chart box for the kWh point labels.
-    ct = y + 22
-    cb = H - 20
-    cl = lx + 4
-    cr = left_w - 8
-    ch = cb - ct
-    cwd = cr - cl
-
-    d.rectangle([cl, ct, cr, cb], outline=0, width=1)
-    max_v = max(daily_usage) if daily_usage else 1
-    max_v = max(max_v, 0.1)
-    n = len(daily_usage)
-    if n > 1:
-        pts = []
-        for i, v in enumerate(daily_usage):
-            px = cl + int(cwd * i / (n - 1))
-            # Top value must not sit at the very top edge; keep >= ct+LABEL_H so label fits above.
-            LABEL_H = 16
-            max_pt = cb - 1
-            min_pt = ct + LABEL_H
-            ppt = max_pt - int((max_pt - min_pt) * min(v / max_v, 1.0))
-            pts.append((px, ppt))
-        for i in range(len(pts) - 1):
-            d.line([pts[i], pts[i + 1]], fill=0, width=2)
-        for i, (px, ppt) in enumerate(pts):
-            d.ellipse([px - 2, ppt - 2, px + 2, ppt + 2], fill=0)
-            kwh_str = f"{daily_usage[i]:.1f}"
-            # Clamp label inside the box horizontally.
-            lw = tw(kwh_str, f_xs)
-            lx_p = px - lw // 2
-            lx_p = max(cl + 1, min(lx_p, cr - lw - 1))
-            tx(lx_p, ppt - LABEL_H, kwh_str, f_xs, 0)
-
-    # ═══ RIGHT: INDOOR + FAMILY + Z.AI ═══
-    iy = top
-    tx(col_r, iy, "실내", f_big, 0)
-    iy += 42
-
+    d.line((lx, y, left_w - 6, y), fill=0, width=1); y += 6
+    tx(lx, y, "실내", f_info, 0); y += 28
     rooms = [
         ("거실", val("sensor.geosilrimokeon_ondo"), val("sensor.geosilrimokeon_seubdo")),
         ("안방", val("sensor.anbang_onseubdo_temperature"), val("sensor.anbang_onseubdo_humidity")),
         ("내방", val("sensor.zhimi_ma2_caaf_indoor_temperature"), val("sensor.zhimi_ma2_caaf_relative_humidity")),
         ("베란다", val("sensor.berandaonseubdo_temperature"), val("sensor.berandaonseubdo_humidity")),
+        ("화장실", val("sensor.hwajangsilonseubdo_temperature"), val("sensor.hwajangsilonseubdo_humidity")),
+        ("보일러", val("sensor.boilreosilonseubdo_temperature"), val("sensor.boilreosilonseubdo_humidity")),
     ]
+    col_w = (left_w - lx - 16) // 2
+    for i, (nm, t, h) in enumerate(rooms):
+        bx = lx + (i % 2) * (col_w + 16); ry = y + (i // 2) * 32
+        tx(bx, ry, f"{nm} {t}'", f_info, 0)
+        txr(bx + col_w, ry, f"{h}%", f_info, 0)
 
-    for name, t, h in rooms:
-        tx(col_r, iy, name, f_data, 0)
-        tx(col_r + 80, iy, f"{t}'", f_data, 0)
-        txr(W - mx, iy + 4, f"{h}%", f_info, 0)
-        iy += 34
-
-    # Family
-    iy += 6
-    d.line((col_r, iy, W - mx, iy), fill=0, width=1)
-    iy += 4
-    tx(col_r, iy, "가족", f_big, 0)
-    iy += 38
-
+    iy = top
+    tx(col_r, iy, "가족", f_big, 0); iy += 38
     people = [
         ("아버지", "person.abuji", "sensor.abuji_geocoded_location"),
         ("어무니", "person.jhs600110", "sensor.unknown_geocoded_location"),
         ("우선", "person.woosun", "sensor.useonipoldeu_geocoded_location"),
     ]
-
     for name, person_eid, geo_eid in people:
         state = val(person_eid)
         present = state == "home"
         mark = "O" if present else "X"
-        loc = "재실" if present else "외출"
-        if not present:
-            raw = val(geo_eid, "외출")
-            parts = raw.replace("대한민국", "").replace("서울특별시", "").strip()
-            loc = " ".join(parts.split())[:10] or "외출"
+        loc = "재실" if present else _short_loc(val(geo_eid, "외출"))
         tx(col_r, iy, f"[{mark}] {name}", f_info, 0)
-        txr(W - mx, iy + 2, loc, f_info, 0)
+        if len(loc) <= 4:
+            txr(W - mx, iy + 2, loc, f_info, 0)
+        else:
+            txr(W - mx, iy + 2, loc, f_xs, 0)
+        iy += 28
+
+    iy += 4; d.line((col_r, iy, W - mx, iy), fill=0, width=1); iy += 6
+    tx(col_r, iy, "도어", f_info, 0); iy += 28
+    doors = [
+        ("현관문", "binary_sensor.hyeongwanmun_contact"),
+        ("중문", "binary_sensor.jungmun_contact"),
+        ("에어컨문", "binary_sensor.eeokeon_contact"),
+    ]
+    for nm, eid in doors:
+        stt_raw = val(eid, "off")
+        closed = stt_raw == "off"
+        mark = "O" if closed else "X"
+        stt = "닫힘" if closed else "열림"
+        extra = f"  {ac_power}W" if nm == "에어컨문" else ""
+        tx(col_r, iy, f"[{mark}] {nm}", f_xs, 0)
+        txr(W - mx, iy, f"{stt}{extra}", f_xs, 0)
         iy += 26
 
-    # Z.AI
-    iy += 4
-    d.line((col_r, iy, W - mx, iy), fill=0, width=1)
-    iy += 4
+    iy += 4; d.line((col_r, iy, W - mx, iy), fill=0, width=1); iy += 6
+    pve_cpu = val("sensor.node_pve_cpu_used", "0")
+    pve_ram = val("sensor.node_pve_memory_used_percentage", "0")
+    nvme_t = val("sensor.disk_pve_k2_temperature", "--")
+    ssd_t = val("sensor.disk_pve_ssstc_cl4_8d256_temperature", "--")
+    try:
+        cpu_pct = f"{float(pve_cpu):.0f}"
+    except ValueError:
+        cpu_pct = "0"
+    try:
+        ram_pct = f"{float(pve_ram):.0f}"
+    except ValueError:
+        ram_pct = "0"
+    tx(col_r, iy, "PVE 서버", f_info, 0); iy += 26
+    tx(col_r, iy, f"CPU {cpu_pct}%  RAM {ram_pct}%", f_info, 0); iy += 26
+    tx(col_r, iy, f"NVMe {nvme_t}° SSD {ssd_t}°", f_info, 0); iy += 30
+
+    iy += 2; d.line((col_r, iy, W - mx, iy), fill=0, width=1); iy += 6
     zai = val("sensor.z_ai_token_limit", "--")
     zai_num = int(zai) if zai.isdigit() else 0
     zai_reset = val("sensor.z_ai_rises_sigan", "--")
     if zai_reset != "--" and len(zai_reset) > 10:
         zai_reset = zai_reset[11:16]
-    zai_remain = max(0, 100 - zai_num)
-    tx(col_r, iy, f"Z.AI 잔여 : {zai_remain}%", f_data, 0)
-    iy += 30
-    tx(col_r, iy, f"리셋시간 : {zai_reset}", f_info, 0)
-    iy += 24
-
-    # ── FOOTER ──────────────────────────────────────────────
-    d.line((mx, H - 10, W - mx, H - 10), fill=0, width=1)
-    tx(mx, H - 7, f"HA {now.strftime('%H:%M')}", f_xs, 0)
+    tx(col_r, iy, f"Z.AI 잔여 {max(0, 100 - zai_num)}%", f_data, 0); iy += 34
+    tx(col_r, iy, f"리셋 {zai_reset}", f_info, 0); iy += 28
 
     raw = img.tobytes()
     assert len(raw) == FS
     return raw
-
-
 def push(frame):
     b = "----X4FB"
     crlf = b"\r\n"
