@@ -20,7 +20,7 @@ _time.tzset()
 from PIL import Image, ImageDraw, ImageFont
 
 
-APP_VERSION = "v5.7"
+APP_VERSION = "v5.8"
 
 
 def log(msg):
@@ -386,11 +386,21 @@ def push_window(frame, min_bx, max_bx, min_y, max_y):
     for r in range(y, y + h):
         off = r * WB + min_bx
         region += frame[off:off + (w // 8)]
+    # Send as multipart form-data (same proven path as /upload).
+    b = "----X4WIN"
+    crlf = b"\r\n"
+    body = b"".join([
+        b"--" + b.encode() + crlf,
+        b'Content-Disposition: form-data; name="region"; filename="r.bin"' + crlf,
+        b"Content-Type: application/octet-stream" + crlf + crlf,
+        bytes(region) + crlf,
+        b"--" + b.encode() + b"--" + crlf,
+    ])
     url = (f"http://{X4_IP}/window?x={x}&y={y}&w={w}&h={h}")
-    headers = {"Content-Type": "application/octet-stream"}
+    headers = {"Content-Type": f"multipart/form-data; boundary={b}"}
     if X4_TOKEN:
         headers["X-X4-Token"] = X4_TOKEN
-    req = urllib.request.Request(url, data=bytes(region), headers=headers, method="POST")
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             return 200 <= r.status < 300

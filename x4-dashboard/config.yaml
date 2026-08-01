@@ -1,6 +1,6 @@
 name: X4 E-Paper Dashboard
-version: "5.7.0"
-changelog: "v5.7: 부분 갱신(windowed push) + FULL_REFRESH 30분 주기 실적용"
+version: "5.8.0"
+changelog: "v5.8: windowed push를 multipart로 수정(전송 안정성)"
 slug: x4_paper
 description: Xteink X4 전자종이 홈모니터 대시보드
 arch:
