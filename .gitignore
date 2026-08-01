@@ -1,0 +1,14 @@
+# Secrets / local test
+.env
+*.token
+secrets.*
+
+# Local test / temp
+__pycache__/
+*.pyc
+*_preview.png
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
