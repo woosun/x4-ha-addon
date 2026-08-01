@@ -164,19 +164,17 @@ def render(states):
 
     wcond = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaenalssi")
 
-    # ── HEADER ──────────────────────────────────────────────
     period = "오전" if now.hour < 12 else "오후"
-    tx(mx, 2, period, f_info, 0)
-    tx(mx + 46, 0, now.strftime("%H:%M"), f_big, 0)
-    tx(mx, 40, date_ko(now), f_info, 0)
-    txr(W - mx, 0, f"{X4_IP}", f_info, 0)
+    tx(mx, 0, f"{period} {now.strftime('%H:%M')}", f_big, 0)
+    _ds = date_ko(now)
+    tx((W - tw(_ds, f_info)) // 2, 6, _ds, f_info, 0)
     x4b = "--" if x4_bat == "--" else f"{x4_bat}%"
-    txr(W - mx, 26, f"배터리 {x4b}  |  총 전력 {total_w:.0f}W", f_info, 0)
+    txr(W - mx, 7, f"{X4_IP} · 배터리 {x4b} · {total_w:.0f}W", f_info, 0)
 
     # ── LAYOUT ──────────────────────────────────────────────
     left_w = 460
     col_r = left_w + 6
-    HEADER_H = 76
+    HEADER_H = 48
     top = HEADER_H + 4
     d.line((left_w, top, left_w, H - 14), fill=0, width=1)
 
@@ -337,7 +335,7 @@ def push(frame):
 
 
 def main():
-    log(f"v5.2 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
+    log(f"v5.3 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
     last = None
     while True:
         try:
