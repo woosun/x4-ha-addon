@@ -20,6 +20,9 @@ _time.tzset()
 from PIL import Image, ImageDraw, ImageFont
 
 
+APP_VERSION = "v5.5"
+
+
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -166,6 +169,7 @@ def render(states):
 
     period = "오전" if now.hour < 12 else "오후"
     tx(mx, 0, f"{period} {now.strftime('%H:%M')}", f_big, 0)
+    tx(mx + tw(f"{period} {now.strftime('%H:%M')}", f_big) + 8, 10, APP_VERSION, f_info, 0)
     _ds = date_ko(now)
     tx((W - tw(_ds, f_info)) // 2, 6, _ds, f_info, 0)
     x4b = "--" if x4_bat == "--" else f"{x4_bat}%"
@@ -335,7 +339,7 @@ def push(frame):
 
 
 def main():
-    log(f"v5.4 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
+    log(f"{APP_VERSION} starting — X4={X4_IP} interval={POLL_INTERVAL}s")
     last = None
     while True:
         try:

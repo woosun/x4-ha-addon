@@ -1,6 +1,6 @@
 name: X4 E-Paper Dashboard
-version: "5.4.0"
-changelog: "v5.4: 알파인에 tzdata 추가로 시간대(KST) 실제 적용"
+version: "5.5.0"
+changelog: "v5.5: Dockerfile에 ENV TZ 명시 + 화면 헤더에 버전 표기"
 slug: x4_paper
 description: Xteink X4 전자종이 홈모니터 대시보드
 arch:
