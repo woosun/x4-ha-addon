@@ -20,7 +20,7 @@ _time.tzset()
 from PIL import Image, ImageDraw, ImageFont
 
 
-APP_VERSION = "v5.5"
+APP_VERSION = "v5.6"
 
 
 def log(msg):
@@ -168,8 +168,9 @@ def render(states):
     wcond = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaenalssi")
 
     period = "오전" if now.hour < 12 else "오후"
-    tx(mx, 0, f"{period} {now.strftime('%H:%M')}", f_big, 0)
-    tx(mx + tw(f"{period} {now.strftime('%H:%M')}", f_big) + 8, 10, APP_VERSION, f_info, 0)
+    h12 = now.strftime("%I:%M").lstrip("0")
+    tx(mx, 0, f"{period} {h12}", f_big, 0)
+    tx(mx + tw(f"{period} {h12}", f_big) + 8, 10, APP_VERSION, f_info, 0)
     _ds = date_ko(now)
     tx((W - tw(_ds, f_info)) // 2, 6, _ds, f_info, 0)
     x4b = "--" if x4_bat == "--" else f"{x4_bat}%"
@@ -223,7 +224,8 @@ def render(states):
     y += 4
 
     daily_usage = get_power_history(now)
-    ct = y + 6
+    # Leave room inside the chart box for the kWh point labels.
+    ct = y + 22
     cb = H - 20
     cl = lx + 4
     cr = left_w - 8
@@ -238,15 +240,22 @@ def render(states):
         pts = []
         for i, v in enumerate(daily_usage):
             px = cl + int(cwd * i / (n - 1))
-            ppt = cb - int(ch * min(v / max_v, 1.0)) - 1
+            # Top value must not sit at the very top edge; keep >= ct+LABEL_H so label fits above.
+            LABEL_H = 16
+            max_pt = cb - 1
+            min_pt = ct + LABEL_H
+            ppt = max_pt - int((max_pt - min_pt) * min(v / max_v, 1.0))
             pts.append((px, ppt))
         for i in range(len(pts) - 1):
             d.line([pts[i], pts[i + 1]], fill=0, width=2)
         for i, (px, ppt) in enumerate(pts):
             d.ellipse([px - 2, ppt - 2, px + 2, ppt + 2], fill=0)
-            # BIG kWh labels
             kwh_str = f"{daily_usage[i]:.1f}"
-            tx(px - tw(kwh_str, f_xs) // 2, ppt - 18, kwh_str, f_xs, 0)
+            # Clamp label inside the box horizontally.
+            lw = tw(kwh_str, f_xs)
+            lx_p = px - lw // 2
+            lx_p = max(cl + 1, min(lx_p, cr - lw - 1))
+            tx(lx_p, ppt - LABEL_H, kwh_str, f_xs, 0)
 
     # ═══ RIGHT: INDOOR + FAMILY + Z.AI ═══
     iy = top
