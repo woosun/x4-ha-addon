@@ -1,6 +1,6 @@
 name: X4 E-Paper Dashboard
-version: "5.1.0"
-changelog: "v5.0: clean rebuild, large fonts, Z.AI, power chart, family location"
+version: "5.2.0"
+changelog: "v5.2: header 정리 - 오전/오후 + 날짜, 우측 IP/배터리/총전력 2줄"
 slug: x4_paper
 description: Xteink X4 전자종이 홈모니터 대시보드
 arch:

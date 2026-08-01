@@ -24,6 +24,11 @@ def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def date_ko(dt):
+    wd = ["월", "화", "수", "목", "금", "토", "일"][dt.weekday()]
+    return f"{dt.month}월 {dt.day}일 ({wd})"
+
+
 cfg = json.load(open("/data/options.json"))
 X4_IP = cfg.get("x4_ip", "")
 X4_TOKEN = cfg.get("x4_token", "")
@@ -160,14 +165,19 @@ def render(states):
     wcond = val("sensor.naver_weather_banghag1dong_nalssi_hyeonjaenalssi")
 
     # ── HEADER ──────────────────────────────────────────────
-    tx(mx, 0, now.strftime("%H:%M"), f_big, 0)
-    txr(W - mx, 4, f"{X4_IP} {x4_bat}% {total_w:.0f}W", f_info, 0)
-    d.line((mx, 42, W - mx, 42), fill=0, width=2)
+    period = "오전" if now.hour < 12 else "오후"
+    tx(mx, 2, period, f_info, 0)
+    tx(mx + 46, 0, now.strftime("%H:%M"), f_big, 0)
+    tx(mx, 40, date_ko(now), f_info, 0)
+    txr(W - mx, 0, f"{X4_IP}", f_info, 0)
+    x4b = "--" if x4_bat == "--" else f"{x4_bat}%"
+    txr(W - mx, 26, f"배터리 {x4b}  |  총 전력 {total_w:.0f}W", f_info, 0)
 
     # ── LAYOUT ──────────────────────────────────────────────
     left_w = 460
     col_r = left_w + 6
-    top = 46
+    HEADER_H = 76
+    top = HEADER_H + 4
     d.line((left_w, top, left_w, H - 14), fill=0, width=1)
 
     # ═══ LEFT: WEATHER + FORECAST + POWER ═══
@@ -327,7 +337,7 @@ def push(frame):
 
 
 def main():
-    log(f"v5.1 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
+    log(f"v5.2 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
     last = None
     while True:
         try:
