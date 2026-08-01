@@ -1,0 +1,60 @@
+name: X4 E-Paper Dashboard
+version: "5.0.0"
+changelog: "v5.0: clean rebuild, large fonts, Z.AI, power chart, family location"
+slug: x4_paper
+description: Xteink X4 전자종이 홈모니터 대시보드
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+options:
+  x4_ip: ""
+  x4_token: ""
+  ha_url: "http://homeassistant:8123"
+  ha_token: ""
+  poll_interval: 60
+  entities:
+    - "sensor.naver_weather_banghag1dong_nalssi_hyeonjaeondo"
+    - "sensor.naver_weather_banghag1dong_nalssi_cegamondo"
+    - "sensor.naver_weather_banghag1dong_nalssi_hyeonjaeseubdo"
+    - "sensor.naver_weather_banghag1dong_nalssi_coegoondo"
+    - "sensor.naver_weather_banghag1dong_nalssi_coejeoondo"
+    - "sensor.naver_weather_banghag1dong_nalssi_hyeonjaenalssi"
+    - "sensor.naver_weather_banghag1dong_nalssi_misemeonji"
+    - "sensor.naver_weather_banghag1dong_nalssi_misemeonjideunggeub"
+    - "sensor.naver_weather_banghag1dong_nalssi_comisemeonji"
+    - "sensor.naver_weather_banghag1dong_nalssi_comisemeonjideunggeub"
+    - "sensor.naver_weather_banghag1dong_nalssi_naeilohunalssi"
+    - "sensor.naver_weather_banghag1dong_nalssi_naeilcoegoondo"
+    - "sensor.naver_weather_banghag1dong_nalssi_naeilcoejeoondo"
+    - "sensor.naver_weather_banghag1dong_nalssi_gangsuhwagryul"
+    - "sensor.naver_weather_banghag1dong_nalssi_hyeonjaepungsog"
+    - "sensor.geosilrimokeon_ondo"
+    - "sensor.geosilrimokeon_seubdo"
+    - "sensor.anbang_onseubdo_temperature"
+    - "sensor.anbang_onseubdo_humidity"
+    - "sensor.zhimi_ma2_caaf_indoor_temperature"
+    - "sensor.zhimi_ma2_caaf_relative_humidity"
+    - "sensor.boilreosilonseubdo_temperature"
+    - "sensor.boilreosilonseubdo_humidity"
+    - "sensor.berandaonseubdo_temperature"
+    - "sensor.berandaonseubdo_humidity"
+    - "sensor.geosileeokeon_power"
+    - "sensor.baegeob_power"
+    - "sensor.anmagi_power"
+    - "person.abuji"
+    - "person.jhs600110"
+    - "person.woosun"
+    - "vacuum.robongi"
+    - "sensor.z_ai_token_limit"
+    - "sensor.z_ai_rises_sigan"
+schema:
+  x4_ip: str
+  x4_token: str
+  ha_url: str
+  ha_token: password
+  poll_interval: int(10,3600)
+  entities:
+    - str
