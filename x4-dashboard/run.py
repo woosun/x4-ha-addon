@@ -12,6 +12,11 @@ import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import os
+os.environ.setdefault("TZ", "Asia/Seoul")
+import time as _time
+_time.tzset()
+
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -281,8 +286,13 @@ def render(states):
     iy += 4
     zai = val("sensor.z_ai_token_limit", "--")
     zai_num = int(zai) if zai.isdigit() else 0
+    zai_reset = val("sensor.z_ai_rises_sigan", "--")
+    if zai_reset != "--" and len(zai_reset) > 10:
+        zai_reset = zai_reset[11:16]
     tx(col_r, iy, f"Z.AI 사용 {zai_num}%", f_data, 0)
-    iy += 32
+    iy += 30
+    tx(col_r, iy, f"남은 {100 - zai_num}% 리셋 {zai_reset}", f_info, 0)
+    iy += 24
 
     # ── FOOTER ──────────────────────────────────────────────
     d.line((mx, H - 10, W - mx, H - 10), fill=0, width=1)
@@ -316,7 +326,7 @@ def push(frame):
 
 
 def main():
-    log(f"v2.5 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
+    log(f"v5.0 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
     last = None
     while True:
         try:
