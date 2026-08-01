@@ -1,5 +1,5 @@
 name: X4 E-Paper Dashboard
-version: "5.0.0"
+version: "5.1.0"
 changelog: "v5.0: clean rebuild, large fonts, Z.AI, power chart, family location"
 slug: x4_paper
 description: Xteink X4 전자종이 홈모니터 대시보드

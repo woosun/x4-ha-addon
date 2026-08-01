@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""X4 E-Paper Dashboard — HA Add-on v2.5.
+"""X4 E-Paper Dashboard — HA Add-on v5.1.
 
 Extra large fonts. Simplified to fit 800x480.
 """
@@ -289,9 +289,10 @@ def render(states):
     zai_reset = val("sensor.z_ai_rises_sigan", "--")
     if zai_reset != "--" and len(zai_reset) > 10:
         zai_reset = zai_reset[11:16]
-    tx(col_r, iy, f"Z.AI 사용 {zai_num}%", f_data, 0)
+    zai_remain = max(0, 100 - zai_num)
+    tx(col_r, iy, f"Z.AI 잔여 : {zai_remain}%", f_data, 0)
     iy += 30
-    tx(col_r, iy, f"남은 {100 - zai_num}% 리셋 {zai_reset}", f_info, 0)
+    tx(col_r, iy, f"리셋시간 : {zai_reset}", f_info, 0)
     iy += 24
 
     # ── FOOTER ──────────────────────────────────────────────
@@ -326,7 +327,7 @@ def push(frame):
 
 
 def main():
-    log(f"v5.0 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
+    log(f"v5.1 starting — X4={X4_IP} interval={POLL_INTERVAL}s")
     last = None
     while True:
         try:
